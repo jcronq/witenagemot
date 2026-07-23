@@ -115,12 +115,18 @@ class UsageInfo:
 
 @dataclass(frozen=True)
 class KernelSpec:
-    """Inputs to one :meth:`Kernel.run` invocation, backend-agnostic.
+    """Durable, backend-agnostic configuration for :meth:`Kernel.run`.
+
+    A KernelSpec captures the *reusable* parts of a dispatch —
+    ``model``, ``allowed_tools``, ``append_system_prompt``,
+    ``thinking``, ``max_seconds`` — so a single spec can be shared
+    across many turns without reconstruction. The per-turn user
+    prompt is NOT stored here; it is passed as the second argument
+    to :meth:`Kernel.run` alongside the spec.
 
     ``model`` is required — construction fails loud if it's omitted
-    or empty. Each backend translates the fields (``allowed_tools``,
-    ``append_system_prompt``, ``thinking``) to its native option
-    shape. ``max_seconds`` of 0 means unbounded.
+    or empty. Each backend translates the fields to its native
+    option shape. ``max_seconds`` of 0 means unbounded.
     """
 
     model: str
@@ -128,12 +134,6 @@ class KernelSpec:
     max_seconds: int = 0
     append_system_prompt: str | None = None
     thinking: ThinkingLevel | None = None
-    # The user-turn text for this dispatch. Populated by the runner
-    # after :meth:`AgentSpec.build_kernel_spec` — kept on the spec so
-    # the :class:`Kernel` Protocol's ``run(spec)`` signature is a
-    # single-argument contract. Callers using the kernel directly
-    # (tests, embedded use) can set this via :func:`dataclasses.replace`.
-    user_prompt: str = ""
 
     def __post_init__(self) -> None:
         if not self.model or not isinstance(self.model, str):

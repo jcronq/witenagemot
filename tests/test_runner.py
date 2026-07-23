@@ -16,14 +16,14 @@ from witan import (
 
 
 class FakeKernel:
-    """Records the :class:`KernelSpec` it was handed."""
+    """Records the ``(spec, prompt)`` pairs it was handed."""
 
     def __init__(self) -> None:
-        self.calls: list[KernelSpec] = []
+        self.calls: list[tuple[KernelSpec, str]] = []
 
-    async def run(self, spec: KernelSpec) -> KernelResult:
-        self.calls.append(spec)
-        return KernelResult(text=f"fake:{spec.user_prompt}", usage=None, raw=None)
+    async def run(self, spec: KernelSpec, prompt: str) -> KernelResult:
+        self.calls.append((spec, prompt))
+        return KernelResult(text=f"fake:{prompt}", usage=None, raw=None)
 
 
 @pytest.fixture
@@ -51,7 +51,9 @@ async def test_run_agent_dispatches_turn_text(fake_kernel_patch: FakeKernel) -> 
     result = await run_agent("a", turn=Turn(text="hello"), registry=reg)
     assert result.text == "fake:hello"
     assert len(fake_kernel_patch.calls) == 1
-    assert fake_kernel_patch.calls[0].user_prompt == "hello"
+    spec, prompt = fake_kernel_patch.calls[0]
+    assert prompt == "hello"
+    assert spec.model == "claude-haiku-4-5"
 
 
 async def test_run_agent_applies_behavioral_rules(fake_kernel_patch: FakeKernel) -> None:
@@ -66,7 +68,7 @@ async def test_run_agent_applies_behavioral_rules(fake_kernel_patch: FakeKernel)
         )
     )
     await run_agent("terse", turn=Turn(text="hi"), registry=reg)
-    spec = fake_kernel_patch.calls[0]
+    spec, _prompt = fake_kernel_patch.calls[0]
     assert spec.append_system_prompt is not None
     assert "terse" in spec.append_system_prompt
 

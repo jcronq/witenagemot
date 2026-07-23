@@ -34,7 +34,16 @@ def test_kernel_spec_defaults() -> None:
     assert spec.max_seconds == 0
     assert spec.append_system_prompt is None
     assert spec.thinking is None
-    assert spec.user_prompt == ""
+
+
+def test_kernel_spec_has_no_user_prompt_field() -> None:
+    """Prompt is per-turn — it belongs on Kernel.run(spec, prompt), not on the spec."""
+    from dataclasses import fields
+
+    spec = KernelSpec(model="claude-haiku-4-5")
+    assert not hasattr(spec, "user_prompt")
+    field_names = {f.name for f in fields(KernelSpec)}
+    assert "user_prompt" not in field_names
 
 
 def test_tool_policy_allow() -> None:

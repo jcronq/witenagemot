@@ -19,14 +19,20 @@ __all__ = ["Kernel", "make_kernel"]
 class Kernel(Protocol):
     """Backend-agnostic single-turn LLM invocation contract.
 
-    Impls translate the :class:`KernelSpec` fields into their native
-    request shape, run one turn, and return a normalized
-    :class:`KernelResult`. Streaming is not part of this contract in
-    v0.1 — implementations block until the turn completes.
+    Impls translate the :class:`KernelSpec` fields (durable config)
+    plus the per-turn ``prompt`` into their native request shape, run
+    one turn, and return a normalized :class:`KernelResult`. Splitting
+    spec (reusable) from prompt (per-turn) keeps a single KernelSpec
+    shareable across many dispatches. Streaming is not part of this
+    contract in v0.1 — implementations block until the turn completes.
     """
 
-    async def run(self, spec: KernelSpec) -> KernelResult:
-        """Run one turn against this backend and return the result."""
+    async def run(self, spec: KernelSpec, prompt: str) -> KernelResult:
+        """Run one turn against this backend and return the result.
+
+        ``spec`` is the durable configuration; ``prompt`` is the
+        user-turn text for this specific dispatch.
+        """
         ...
 
 
