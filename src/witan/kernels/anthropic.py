@@ -132,21 +132,20 @@ class AnthropicKernel:
             self._client = AsyncAnthropic()
         return self._client
 
-    async def run(self, spec: KernelSpec) -> KernelResult:
+    async def run(self, spec: KernelSpec, prompt: str) -> KernelResult:
         """Dispatch one turn and return the normalized result.
 
-        Reads the user message off :attr:`KernelSpec.user_prompt`; the
-        runner sets that field before dispatch. Direct callers set it
-        via :func:`dataclasses.replace`. Kept minimal on purpose:
-        this is a translator, not an agent loop — multi-step tool use
-        is v0.2 territory.
+        ``spec`` carries the durable config (model, tools, thinking,
+        etc.); ``prompt`` is the per-turn user message text. Kept
+        minimal on purpose: this is a translator, not an agent loop —
+        multi-step tool use is v0.2 territory.
         """
         client = self._get_client()
         kwargs: dict[str, Any] = {
             "model": spec.model,
             "max_tokens": self._max_tokens,
             "messages": [
-                {"role": "user", "content": spec.user_prompt}
+                {"role": "user", "content": prompt}
             ],
         }
         if spec.append_system_prompt:

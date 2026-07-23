@@ -79,9 +79,10 @@ def test_run_dispatches_stdin_to_agent(
     seen: dict[str, Any] = {}
 
     class _FakeKernel:
-        async def run(self, spec: KernelSpec) -> KernelResult:
+        async def run(self, spec: KernelSpec, prompt: str) -> KernelResult:
             seen["spec"] = spec
-            return KernelResult(text=f"reply:{spec.user_prompt.strip()}")
+            seen["prompt"] = prompt
+            return KernelResult(text=f"reply:{prompt.strip()}")
 
     monkeypatch.setattr(
         "witan.runner.make_kernel", lambda _backend: _FakeKernel()
@@ -94,7 +95,7 @@ def test_run_dispatches_stdin_to_agent(
     assert exit_code == 0
     captured = capsys.readouterr()
     assert "reply:hello from stdin" in captured.out
-    assert seen["spec"].user_prompt == "hello from stdin"
+    assert seen["prompt"] == "hello from stdin"
 
 
 def test_run_unknown_agent_exits_nonzero(

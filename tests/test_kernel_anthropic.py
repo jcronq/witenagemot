@@ -68,9 +68,8 @@ async def test_run_translates_spec_to_api_args(stub_client: _StubClient) -> None
         allowed_tools=("read_file",),
         append_system_prompt="Be terse.",
         thinking="low",
-        user_prompt="hello",
     )
-    result = await kernel.run(spec)
+    result = await kernel.run(spec, "hello")
     call = stub_client.messages.calls[0]
     assert call["model"] == "claude-haiku-4-5"
     assert call["max_tokens"] == 512
@@ -89,16 +88,16 @@ async def test_run_translates_spec_to_api_args(stub_client: _StubClient) -> None
 
 async def test_run_thinking_off_maps_to_disabled(stub_client: _StubClient) -> None:
     kernel = AnthropicKernel(client=stub_client)
-    spec = KernelSpec(model="claude-haiku-4-5", thinking="off", user_prompt="hi")
-    await kernel.run(spec)
+    spec = KernelSpec(model="claude-haiku-4-5", thinking="off")
+    await kernel.run(spec, "hi")
     call = stub_client.messages.calls[0]
     assert call["thinking"] == {"type": "disabled"}
 
 
 async def test_run_omits_optional_fields_when_unset(stub_client: _StubClient) -> None:
     kernel = AnthropicKernel(client=stub_client)
-    spec = KernelSpec(model="claude-haiku-4-5", user_prompt="hi")
-    await kernel.run(spec)
+    spec = KernelSpec(model="claude-haiku-4-5")
+    await kernel.run(spec, "hi")
     call = stub_client.messages.calls[0]
     assert "system" not in call
     assert "tools" not in call
@@ -108,8 +107,8 @@ async def test_run_omits_optional_fields_when_unset(stub_client: _StubClient) ->
 
 async def test_run_max_seconds_sets_timeout(stub_client: _StubClient) -> None:
     kernel = AnthropicKernel(client=stub_client)
-    spec = KernelSpec(model="claude-haiku-4-5", max_seconds=30, user_prompt="hi")
-    await kernel.run(spec)
+    spec = KernelSpec(model="claude-haiku-4-5", max_seconds=30)
+    await kernel.run(spec, "hi")
     assert stub_client.messages.calls[0]["timeout"] == 30.0
 
 
@@ -119,9 +118,23 @@ async def test_run_handles_dict_shaped_content(stub_client: _StubClient) -> None
         usage=_StubUsage(input_tokens=1, output_tokens=2),
     )
     kernel = AnthropicKernel(client=stub_client)
-    spec = KernelSpec(model="claude-haiku-4-5", user_prompt="hi")
-    result = await kernel.run(spec)
+    spec = KernelSpec(model="claude-haiku-4-5")
+    result = await kernel.run(spec, "hi")
     assert result.text == "dict form"
+
+
+async def test_run_reuses_spec_across_multiple_prompts(stub_client: _StubClient) -> None:
+    """A single KernelSpec is durable — same spec, different prompts per turn."""
+    kernel = AnthropicKernel(client=stub_client)
+    spec = KernelSpec(model="claude-haiku-4-5")
+    await kernel.run(spec, "first")
+    await kernel.run(spec, "second")
+    assert stub_client.messages.calls[0]["messages"] == [
+        {"role": "user", "content": "first"}
+    ]
+    assert stub_client.messages.calls[1]["messages"] == [
+        {"role": "user", "content": "second"}
+    ]
 
 
 def test_make_kernel_returns_kernel_protocol_instance() -> None:

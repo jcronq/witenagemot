@@ -35,7 +35,9 @@ The AgentSpec wraps a `KernelSpec` — the runtime doesn't replace it, it decora
 
 ### 2. `Kernel`
 
-The backend-agnostic LLM invocation layer. Every backend takes the same `KernelSpec`, returns the same `KernelResult`, and emits the same `TurnSummary`/`SystemEvent` stream. Provider-specific types (Anthropic's `ResultMessage`, OpenAI's response objects, local model responses) are translated by each backend before crossing the abstraction boundary.
+The backend-agnostic LLM invocation layer. Every backend takes the same `(KernelSpec, prompt)` pair — spec is the *durable* configuration (model + allowed tools + system-prompt appends + thinking level), reusable across many turns; `prompt` is the *per-turn* user message text. The split keeps a single `KernelSpec` shareable across a session without reconstructing it every dispatch. Every backend returns the same `KernelResult` and emits the same `TurnSummary`/`SystemEvent` stream. Provider-specific types (Anthropic's `ResultMessage`, OpenAI's response objects, local model responses) are translated by each backend before crossing the abstraction boundary.
+
+The protocol signature is `async def run(self, spec: KernelSpec, prompt: str) -> KernelResult`.
 
 **Backends shipped v0.1:**
 - `anthropic` — via the Claude Agent SDK
@@ -106,7 +108,7 @@ Same shape works for any `Channel`. To fan in from multiple channels, users writ
 2. Applies `ToolPolicy` to trim the requested tool set (raises `PolicyViolation` if it empties)
 3. Injects active `BehavioralRule`s into the system prompt
 4. Picks a `Kernel` impl from `backend` (or `_default_backend_for_agent`)
-5. Dispatches one turn
+5. Dispatches one turn via `kernel.run(effective_spec, turn.text)` — the durable spec plus the per-turn prompt as separate arguments
 6. Applies `OutputSchema` validation if set
 7. Returns `KernelResult`
 
