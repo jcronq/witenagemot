@@ -87,16 +87,16 @@ default_registry.register(AgentSpec(
     kernel=KernelSpec(model="claude-sonnet-4-6", ...),
 ))
 
-# Wire a transport
-channel = SignalChannel(account="+15555550000")
+# Wire a transport (v0.1 ships StdChannel; SignalChannel lands v0.2)
+channel = StdChannel()
 
-# Run
-async for turn in channel.receive_loop():
+# User composes the loop — no framework magic
+async for turn in channel.receive():
     result = await run_agent("triage", turn=turn)
     await channel.send(result.text, reply_to=turn)
 ```
 
-Same code, `Channel = SurfaceChannel(inbox_dir=...)` — agent now runs on inter-agent surface protocol instead of Signal. No agent code changes.
+Same shape works for any `Channel`. To fan in from multiple channels, users write their own merge loop with `asyncio.wait` or a helper library — Witan doesn't hide it (see the Decisions section).
 
 ## The runner
 
@@ -121,31 +121,34 @@ Direct import as shown above. First-class citizen.
 ### CLI
 
 ```
-witan serve <agent>       # start the agent as a long-running Signal listener
-witan run <agent> <input> # run a single turn from stdin
+witan run <agent>         # v0.1: run a single turn from stdin
+witan serve <agent>       # v0.2: long-running listener on a chosen channel
 witan list-agents         # what's in the registry
-witan validate            # lint agents/*.yaml
+witan validate            # lint agents/*.toml
 ```
 
 ### Config files
 
-Agents defined in YAML under `agents/*.yaml`:
+Agents defined in TOML under `agents/*.toml`:
 
-```yaml
-name: triage
-persona: customer-support-tier-1
-kernel:
-  model: claude-sonnet-4-6
-  allowed_tools: [read_file, search_kb, send_message]
-tool_policy:
-  type: allow
-  allowlist: [read_file, search_kb, send_message]
-behavioral_rules:
-  - id: terse
-    injection: "Reply in <= 3 sentences."
+```toml
+name = "triage"
+persona = "customer-support-tier-1"
+
+[kernel]
+model = "claude-sonnet-4-6"   # required — no default; must be explicit
+allowed_tools = ["read_file", "search_kb", "send_message"]
+
+[tool_policy]
+type = "allow"
+allowlist = ["read_file", "search_kb", "send_message"]
+
+[[behavioral_rules]]
+id = "terse"
+injection = "Reply in <= 3 sentences."
 ```
 
-Same shape as the dataclass. YAML is the canonical persistence format; Python is the runtime API.
+Same shape as the dataclass. TOML is the canonical persistence format; Python is the runtime API.
 
 ## What NOT to build (yet)
 
@@ -164,23 +167,27 @@ Explicit non-goals for v0.1 so scope doesn't creep:
 - `AgentSpec`, `ToolPolicy`, `BehavioralRule`, `OutputSchema`
 - `Kernel` protocol + anthropic backend
 - `Registry` + `run_agent`
-- `SignalChannel` + `StdChannel`
-- CLI: `witan serve`, `witan run`
-- One example: a Signal echo agent
+- `StdChannel` for local dev
+- CLI: `witan run` (one-shot from stdin)
+- One example: a stdin echo agent that demonstrates the primitives
 
-**v0.2** — OpenAI + local backends. `SurfaceChannel`. YAML config loading. Two more examples (dispatcher pattern, agent-to-agent handoff).
+**v0.2** — OpenAI + local backends. `SignalChannel` + `SurfaceChannel`. TOML config loading. Two more examples (dispatcher pattern, agent-to-agent handoff). `witan serve`.
 
-**v0.3** — `OutputSchema` validation. HTTP channel. Docs.
+**v0.3** — `OutputSchema` validation. HTTP channel. Convenience helper `MultiChannelRunner` if user demand shows the merge pattern is common. Docs site.
 
 **v1.0** — stable API. Full test coverage. Production-ready for the automated-company use case.
 
-## Open design questions for Jason
+## Decisions (2026-07-23)
 
-1. **License** — MIT is proposed; is that right, or private-then-open, or Apache-2 for patent clauses?
-2. **Repo visibility** — public jcronq/witenagemot or private for now?
-3. **Naming inside the lib** — `witan` as the package name; but do we want the "witan" concept surfaced in class names too (`Councilor` instead of `Agent`? `Witenagemot` instead of `Registry`?) or is that too cute?
-4. **Config format** — YAML above. Fine, or prefer TOML / Python-only?
-5. **Base model default** — what should agents get if they don't specify a model? `claude-sonnet-4-6` is a reasonable current default; anything else?
-6. **The channel-plurality question** — a single agent might read from multiple channels (Signal + Surface). Does the runner handle multi-channel dispatch, or is it the user's job to compose channels?
+Answered by Jason:
 
-Once these land, v0.1 implementation starts.
+1. **License:** MIT.
+2. **Visibility:** Public. Live at https://github.com/jcronq/witenagemot.
+3. **Class naming:** Plain — `Agent`, `Registry`, `Kernel`, `Channel`. Theme lives in the project name and docs, not the code surface.
+4. **Config format:** TOML. Same file family as `pyproject.toml`; no extra parser dep.
+5. **Default model:** None. Every `AgentSpec` must declare its model explicitly. Fails loud if omitted.
+6. **Multi-channel dispatch:** User composes. Channels expose async iterators; users write their own merge loop. A `MultiChannelRunner` convenience helper is v0.3 territory, added only if demand emerges.
+
+## Open questions
+
+None currently blocking v0.1. Adjustments will land as commits to this doc alongside code that motivates them.
